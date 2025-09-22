@@ -1,36 +1,72 @@
 import docx
 import requests
 import re
+import os
+import google.generativeai as genai
+import ast
 
 # ProPresenter API configuration
 PROPPRESENTER_URL = "http://localhost:1025"
+
+def detect_songs_with_gemini(text):
+    """Detects songs in a text using the Gemini API."""
+    try:
+        api_key = os.environ.get("GEMINI_API_KEY")
+        if not api_key:
+            return "Error: GEMINI_API_KEY environment variable not set."
+        
+        genai.configure(api_key=api_key)
+        model = genai.GenerativeModel('gemini-pro')
+        
+        prompt = f"""You are an expert at parsing church service plans. From the following text, extract all song titles. Return only a Python list of strings, where each string is a song title. For example: `["Song Title 1", "Song Title 2"]`. Do not include psalms or other non-song items. If no songs are found, return an empty list `[]`. Text:
+
+{text}"""
+        
+        response = model.generate_content(prompt)
+
+        # Find a Python list-like string in the response text.
+        match = re.search(r'\s*(\[.*\])\s*', response.text, re.DOTALL)
+        if not match:
+            return f"Error: Could not find a list in the Gemini API response. Response text: {response.text}"
+
+        list_string = match.group(1)
+        
+        try:
+            song_list = ast.literal_eval(list_string)
+            if not isinstance(song_list, list) or not all(isinstance(s, str) for s in song_list):
+                return "Error: Gemini API did not return a valid list of song titles."
+            return song_list
+        except (ValueError, SyntaxError):
+            return f"Error: Failed to parse the list from the Gemini API response: {list_string}"
+
+    except Exception as e:
+        return f"Error calling Gemini API: {e}"
 
 def parse_docx(file_path):
     """Parses the .docx file to extract songs and psalms."""
     try:
         doc = docx.Document(file_path)
-        full_text = [para.text for para in doc.paragraphs]
+        full_text = "\n".join([para.text for para in doc.paragraphs])
         
+        # Use Gemini to detect songs
+        song_titles = detect_songs_with_gemini(full_text)
+        if isinstance(song_titles, str): # Error occurred
+            return song_titles
+
         items = []
-        in_praise_block = False
-        
-        for line in full_text:
-            if "Lobpreis-Block" in line:
-                in_praise_block = True
-                continue
-            
-            if in_praise_block and line.strip().startswith("-"):
-                song_title = line.strip().lstrip("-").strip()
-                items.append({"type": "song", "value": song_title})
-            
-            if in_praise_block and not line.strip().startswith("-") and line.strip() != "":
-                in_praise_block = False
-            
-            if "Psalm" in line:
-                match = re.search(r"Psalm (\d+)", line)
+        for title in song_titles:
+            items.append({"type": "song", "value": title})
+
+        # Use regex to find unique psalms
+        found_psalms = set()
+        for para in doc.paragraphs:
+            if "Psalm" in para.text:
+                match = re.search(r"Psalm (\d+)", para.text)
                 if match:
-                    psalm_number = match.group(1)
-                    items.append({"type": "psalm", "value": f"Psalm {psalm_number}"})
+                    psalm_value = f"Psalm {match.group(1)}"
+                    if psalm_value not in found_psalms:
+                        items.append({"type": "psalm", "value": psalm_value})
+                        found_psalms.add(psalm_value)
         
         return items
     except Exception as e:

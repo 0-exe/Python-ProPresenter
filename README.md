@@ -1,21 +1,41 @@
 # ProPresenter Playlist Creator
 
-This application helps you create a ProPresenter playlist from a Word document containing your service plan. It parses a `.docx` file, identifies songs and psalms, and uses the ProPresenter API to create a playlist.
+This application helps you create a ProPresenter playlist from a Word document containing your service plan. It uses the Gemini AI to detect songs and also finds psalms in the document, then uses the ProPresenter API to create a playlist.
 
 ## Setup
 
 ### Prerequisites
 - Python 3 (https://www.python.org/downloads/)
 - ProPresenter 7 with the HTTP API enabled.
+- A Google Gemini API Key.
 
-### 1. Enable ProPresenter API
+### 1. Gemini API Setup
+1.  **Get a Gemini API Key:**
+    - Go to Google AI Studio: https://aistudio.google.com/app/apikey
+    - Create a new API key.
+2.  **Set the API Key as an Environment Variable:**
+    - You need to set an environment variable named `GEMINI_API_KEY` to the value of your key.
+    - **On macOS/Linux:**
+        - Open your terminal and run:
+        ```bash
+        export GEMINI_API_KEY="YOUR_API_KEY"
+        ```
+        - To make this permanent, add this line to your shell's profile file (e.g., `~/.zshrc`, `~/.bashrc`).
+    - **On Windows:**
+        - Open Command Prompt and run:
+        ```cmd
+        setx GEMINI_API_KEY "YOUR_API_KEY"
+        ```
+        - You may need to restart your command prompt or your computer for this to take effect.
+
+### 2. Enable ProPresenter API
 1. Open ProPresenter.
 2. Go to `Preferences` > `Network`.
 3. Make sure `Enable Network` is checked.
 4. Under `HTTP Server`, check `Enable HTTP Server`.
 5. Note the `Port` number (default is 1025). The application assumes the default port.
 
-### 2. Project Setup
+### 3. Project Setup
 1.  **Download or clone this project.**
 2.  **Open a terminal or command prompt** and navigate to the project directory:
     ```bash
@@ -38,6 +58,7 @@ This application helps you create a ProPresenter playlist from a Word document c
     ```bash
     pip install -r requirements.txt
     ```
+    This will install `python-docx`, `requests`, `beautifulsoup4`, and `google-generativeai`.
 
 ## How to Use
 
@@ -49,50 +70,48 @@ This application helps you create a ProPresenter playlist from a Word document c
 
 ### Step-by-Step Guide
 
-1.  **Select Word Document:**
+1.  **Check API Key:**
+    - If you haven't set the `GEMINI_API_KEY` environment variable, the application will show an error message.
+
+2.  **Select Word Document:**
     - Click the "Browse..." button to select the `.docx` file containing your service plan.
     - The application will automatically fill in the "Playlist Name" based on the filename, but you can change it.
 
-2.  **Enter Playlist Name:**
+3.  **Enter Playlist Name:**
     - If you don't like the automatically filled name, enter a new name for your ProPresenter playlist.
 
-3.  **Select Psalm Translation:**
+4.  **Select Psalm Translation:**
     - Choose your preferred Bible translation for the psalms from the dropdown menu.
 
-4.  **Start the Process:**
+5.  **Start the Process:**
     - Click the "Start" button.
-    - The application will parse your document and display any songs it finds in the log area.
+    - The application will read your document, send the text to Gemini AI for song detection, and display any songs it finds in the log area.
 
-5.  **Import Songs into ProPresenter:**
+6.  **Import Songs into ProPresenter:**
     - If the log prompts you to import songs, open ProPresenter and use CCLI SongSelect to import the listed songs into your library.
     - **This is a manual step you must perform in ProPresenter.**
 
-6.  **Continue:**
+7.  **Continue:**
     - Once you have imported the songs into ProPresenter, click the "Continue" button in the application.
 
-7.  **Playlist Creation:**
+8.  **Playlist Creation:**
     - The application will then:
         - Fetch the text for any psalms in your plan.
         - Connect to your ProPresenter library.
         - Create a new playlist.
         - Add the songs (that it finds in the library) and psalms to the new playlist.
 
-8.  **Check the Log:**
+9.  **Check the Log:**
     - The log area will show the progress and the final result. If a song from your plan is not found in your ProPresenter library, a message will be shown.
 
-9.  **Quit:**
+10. **Quit:**
     - Click the "Quit" button to close the application.
 
 ## How the `.docx` file should be formatted
 
-The application looks for specific keywords in your `.docx` file to identify songs and psalms.
+With the power of Gemini AI, you don't need to follow a strict format for songs anymore. Just list them naturally in your document. The AI is trained to find them.
 
--   **Songs:** Songs should be in a "Lobpreis-Block" section, with each song on a new line prefixed with a `-`.
-    ```
-    Lobpreis-Block
-    - Amazing Grace
-    - How Great Thou Art
-    ```
+For psalms, you should still use the format the application recognizes:
 
 -   **Psalms:** Psalms should be mentioned with the "Psalm" keyword followed by the number.
     ```

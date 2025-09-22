@@ -1,8 +1,8 @@
-
 import tkinter as tk
 from tkinter import ttk, filedialog, messagebox
 import core
 import threading
+import os
 
 class ProPresenterGUI(tk.Tk):
     def __init__(self):
@@ -84,9 +84,17 @@ class ProPresenterGUI(tk.Tk):
             messagebox.showerror("Error", "Please select a file and enter a playlist name.")
             return
 
+        if not os.environ.get("GEMINI_API_KEY"):
+            messagebox.showerror("Error", "GEMINI_API_KEY environment variable not set. Please set it to your Gemini API key. See README.md for details.")
+            return
+
         self.log("Starting process...")
         self.start_button.config(state=tk.DISABLED)
         
+        # Run parsing in a thread to keep GUI responsive
+        threading.Thread(target=self.parse_docx_thread).start()
+
+    def parse_docx_thread(self):
         self.service_items = core.parse_docx(self.file_path.get())
         if isinstance(self.service_items, str):
             messagebox.showerror("Error", self.service_items)
