@@ -11,11 +11,12 @@ class ProPresenterGUI(tk.Tk):
     def __init__(self):
         super().__init__()
         self.title("ProPresenter Playlist Creator")
-        self.geometry("800x750")
+        self.geometry("800x800")
 
         # Config variables
         self.api_key = tk.StringVar()
-        self.model_name = tk.StringVar(value="gemini-pro")
+        self.model_name = tk.StringVar()
+        self.propresenter_url = tk.StringVar()
 
         # App variables
         self.file_path = tk.StringVar()
@@ -34,13 +35,18 @@ class ProPresenterGUI(tk.Tk):
                     config = json.load(f)
                     self.api_key.set(config.get("api_key", ""))
                     self.model_name.set(config.get("model_name", "gemini-pro"))
+                    self.propresenter_url.set(config.get("propresenter_url", "http://localhost:1025"))
             except (json.JSONDecodeError, TypeError):
                 self.log(f"Warning: Could not read {CONFIG_FILE}. File might be corrupt.")
+        else:
+            self.model_name.set("gemini-pro")
+            self.propresenter_url.set("http://localhost:1025")
 
     def save_config(self):
         config = {
             "api_key": self.api_key.get(),
-            "model_name": self.model_name.get()
+            "model_name": self.model_name.get(),
+            "propresenter_url": self.propresenter_url.get()
         }
         with open(CONFIG_FILE, 'w') as f:
             json.dump(config, f, indent=4)
@@ -60,13 +66,16 @@ class ProPresenterGUI(tk.Tk):
 
         ttk.Label(settings_frame, text="Model Name:").grid(row=1, column=0, padx=5, pady=5, sticky=tk.W)
         ttk.Entry(settings_frame, textvariable=self.model_name, width=30).grid(row=1, column=1, padx=5, pady=5, sticky=tk.W)
+
+        ttk.Label(settings_frame, text="ProPresenter URL:").grid(row=2, column=0, padx=5, pady=5, sticky=tk.W)
+        ttk.Entry(settings_frame, textvariable=self.propresenter_url, width=30).grid(row=2, column=1, padx=5, pady=5, sticky=tk.W)
         
-        ttk.Button(settings_frame, text="Save Settings", command=self.save_config).grid(row=1, column=2, padx=5, pady=5)
+        ttk.Button(settings_frame, text="Save Settings", command=self.save_config).grid(row=2, column=2, padx=5, pady=5, sticky=tk.E)
         settings_frame.columnconfigure(1, weight=1)
 
         # --- Main App Frame ---
         app_frame = ttk.LabelFrame(main_frame, text="Create Playlist")
-        app_frame.pack(fill=tk.X, padx=5, pady=5, margin=10)
+        app_frame.pack(fill=tk.X, padx=5, pady=10)
 
         # File selection
         file_frame = ttk.Frame(app_frame)
@@ -107,7 +116,7 @@ class ProPresenterGUI(tk.Tk):
         ttk.Button(button_frame, text="Quit", command=self.quit).pack(side=tk.RIGHT, padx=5, pady=5)
 
     def log(self, message):
-        self.log_text.insert(tk.END, message + "\n")
+        self.log_text.insert(tk.END, str(message) + "\n")
         self.log_text.see(tk.END)
 
     def select_file(self):
@@ -132,6 +141,8 @@ class ProPresenterGUI(tk.Tk):
 
     def parse_docx_thread(self):
         self.service_items = core.parse_docx(self.file_path.get(), self.api_key.get(), self.model_name.get())
+        self.log(f"[DEBUG] Service items parsed: {self.service_items}")
+
         if isinstance(self.service_items, str):
             self.log(f"Error: {self.service_items}")
             messagebox.showerror("Error", self.service_items)
@@ -156,10 +167,12 @@ class ProPresenterGUI(tk.Tk):
         threading.Thread(target=self.create_playlist_thread).start()
 
     def create_playlist_thread(self):
-        self.log("Fetching ProPresenter library...")
-        library = core.get_library()
+        url = self.propresenter_url.get()
+        self.log(f"Fetching ProPresenter library from {url}...")
+        library = core.get_library(url)
         if isinstance(library, str):
             self.log(f"Error: {library}")
+            messagebox.showerror("ProPresenter Error", library)
             self.start_button.config(state=tk.NORMAL)
             return
 
@@ -176,7 +189,7 @@ class ProPresenterGUI(tk.Tk):
                 playlist_items.append({"type": "psalm", "name": item["value"], "content": psalm_text})
         
         self.log("Creating ProPresenter playlist...")
-        result = core.create_propresenter_playlist(self.playlist_name.get(), playlist_items, library)
+        result = core.create_propresenter_playlist(self.playlist_name.get(), playlist_items, library, url)
         self.log(result)
         self.log("\nProcess finished.")
         self.start_button.config(state=tk.NORMAL)

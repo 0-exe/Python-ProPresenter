@@ -5,9 +5,6 @@ import os
 import google.generativeai as genai
 import ast
 
-# ProPresenter API configuration
-PROPPRESENTER_URL = "http://localhost:1025"
-
 def detect_songs_with_gemini(text, api_key, model_name):
     """Detects songs in a text using the Gemini API."""
     try:
@@ -17,9 +14,30 @@ def detect_songs_with_gemini(text, api_key, model_name):
         genai.configure(api_key=api_key)
         model = genai.GenerativeModel(model_name)
         
-        prompt = f"""You are an expert at parsing church service plans. From the following text, extract all song titles. Return only a Python list of strings, where each string is a song title. For example: `["Song Title 1", "Song Title 2"]`. Do not include psalms or other non-song items. If no songs are found, return an empty list `[]`. Text:
+        prompt = f"""You are an expert at parsing church service plans. Your task is to extract all song titles from the provided text. Return only a Python list of strings, where each string is a song title.
 
-{text}"""
+Here is an example:
+---
+TEXT:
+Anfangslied: Cornerstone (Hillsong)
+... some other text ...
+Lobpreis-Block
+- Mighty to Save
+- What a Beautiful Name
+... 
+Schlusslied: Amazing Grace
+---
+RESPONSE:
+["Cornerstone", "Mighty to Save", "What a Beautiful Name", "Amazing Grace"]
+---
+
+Now, perform the same task on the following text. Do not include psalms or other non-song items. If no songs are found, return an empty list `[]`.
+
+TEXT:
+{text}
+---
+RESPONSE:
+"""
         
         response = model.generate_content(prompt)
 
@@ -42,13 +60,26 @@ def detect_songs_with_gemini(text, api_key, model_name):
         return f"Error calling Gemini API: {e}"
 
 def parse_docx(file_path, api_key, model_name):
-    """Parses the .docx file to extract songs and psalms."""
+    """Parses the .docx file to extract songs and psalms from paragraphs and tables."""
     try:
         doc = docx.Document(file_path)
-        full_text = "\n".join([para.text for para in doc.paragraphs])
+        full_text_parts = []
+
+        # Extract text from paragraphs
+        for para in doc.paragraphs:
+            full_text_parts.append(para.text)
+
+        # Extract text from tables
+        for table in doc.tables:
+            for row in table.rows:
+                for cell in row.cells:
+                    full_text_parts.append(cell.text)
+        
+        full_text = "\n".join(full_text_parts)
         
         # Use Gemini to detect songs
         song_titles = detect_songs_with_gemini(full_text, api_key, model_name)
+
         if isinstance(song_titles, str): # Error occurred
             return song_titles
 
@@ -81,10 +112,11 @@ def get_psalm(psalm_reference, translation):
     except requests.exceptions.RequestException as e:
         return f"Error fetching psalm: {e}"
 
-def get_library():
+def get_library(propresenter_url):
     """Fetches the ProPresenter library."""
+    base_url = propresenter_url.rstrip('/')
     try:
-        response = requests.get(f"{PROPPRESENTER_URL}/api/v1/library")
+        response = requests.get(f"{base_url}/api/v1/library")
         response.raise_for_status()
         return response.json()
     except requests.exceptions.RequestException as e:
@@ -97,8 +129,9 @@ def find_presentation_in_library(library, name):
             return item
     return None
 
-def create_propresenter_presentation(name, content):
+def create_propresenter_presentation(name, content, propresenter_url):
     """Creates a presentation in ProPresenter."""
+    base_url = propresenter_url.rstrip('/')
     try:
         presentation = {
             "name": name,
@@ -108,26 +141,28 @@ def create_propresenter_presentation(name, content):
                 }
             ]
         }
-        response = requests.post(f"{PROPPRESENTER_URL}/api/v1/presentation", json=presentation)
+        response = requests.post(f"{base_url}/api/v1/presentation", json=presentation)
         response.raise_for_status()
         return response.json()
     except requests.exceptions.RequestException as e:
         return f"Error creating ProPresenter presentation: {e}"
 
-def add_to_propresenter_playlist(playlist_id, presentation_id):
+def add_to_propresenter_playlist(playlist_id, presentation_id, propresenter_url):
     """Adds a presentation to a playlist in ProPresenter."""
+    base_url = propresenter_url.rstrip('/')
     try:
-        response = requests.post(f"{PROPPRESENTER_URL}/api/v1/playlist/{playlist_id}/items", json={"id": presentation_id})
+        response = requests.post(f"{base_url}/api/v1/playlist/{playlist_id}/items", json={"id": presentation_id})
         response.raise_for_status()
         return None
     except requests.exceptions.RequestException as e:
         return f"Error adding to ProPresenter playlist: {e}"
 
-def create_propresenter_playlist(playlist_name, items, library):
+def create_propresenter_playlist(playlist_name, items, library, propresenter_url):
     """Creates a playlist in ProPresenter and adds items to it."""
+    base_url = propresenter_url.rstrip('/')
     log = []
     try:
-        response = requests.post(f"{PROPPRESENTER_URL}/api/v1/playlist", json={"name": playlist_name})
+        response = requests.post(f"{base_url}/api/v1/playlist", json={"name": playlist_name})
         response.raise_for_status()
         playlist_id = response.json()["id"]
         log.append(f"Successfully created playlist '{playlist_name}' with ID: {playlist_id}")
@@ -136,7 +171,7 @@ def create_propresenter_playlist(playlist_name, items, library):
             if item["type"] == "song":
                 presentation = find_presentation_in_library(library, item["name"])
                 if presentation:
-                    error = add_to_propresenter_playlist(playlist_id, presentation["id"])
+                    error = add_to_propresenter_playlist(playlist_id, presentation["id"], base_url)
                     if error:
                         log.append(error)
                     else:
@@ -144,9 +179,9 @@ def create_propresenter_playlist(playlist_name, items, library):
                 else:
                     log.append(f"Could not find '{item['name']}' in the ProPresenter library.")
             elif item["type"] == "psalm":
-                presentation = create_propresenter_presentation(item["name"], item["content"])
+                presentation = create_propresenter_presentation(item["name"], item["content"], base_url)
                 if presentation and 'id' in presentation:
-                    error = add_to_propresenter_playlist(playlist_id, presentation["id"])
+                    error = add_to_propresenter_playlist(playlist_id, presentation["id"], base_url)
                     if error:
                         log.append(error)
                     else:
