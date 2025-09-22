@@ -34,24 +34,17 @@ def parse_docx(file_path):
         
         return items
     except Exception as e:
-        print(f"Error parsing docx file: {e}")
-        return []
-
-def get_song_lyrics(song_title):
-    """Returns the song title."""
-    return song_title
+        return f"Error parsing docx file: {e}"
 
 def get_psalm(psalm_reference, translation):
     """Fetches psalm text from a Bible API."""
-    print(f"Fetching psalm: {psalm_reference} ({translation})")
     try:
-        response = requests.get(f"https://bible-api.com/{psalm_reference}?translation=luther")
+        response = requests.get(f"https://bible-api.com/{psalm_reference}?translation={translation}")
         response.raise_for_status()
         data = response.json()
         return data["text"]
     except requests.exceptions.RequestException as e:
-        print(f"Error fetching psalm: {e}")
-        return f"Could not fetch text for {psalm_reference}"
+        return f"Error fetching psalm: {e}"
 
 def get_library():
     """Fetches the ProPresenter library."""
@@ -60,8 +53,7 @@ def get_library():
         response.raise_for_status()
         return response.json()
     except requests.exceptions.RequestException as e:
-        print(f"Error fetching ProPresenter library: {e}")
-        return []
+        return f"Error fetching ProPresenter library: {e}"
 
 def find_presentation_in_library(library, name):
     """Finds a presentation in the ProPresenter library."""
@@ -85,71 +77,52 @@ def create_propresenter_presentation(name, content):
         response.raise_for_status()
         return response.json()
     except requests.exceptions.RequestException as e:
-        print(f"Error creating ProPresenter presentation: {e}")
-        return None
+        return f"Error creating ProPresenter presentation: {e}"
 
 def add_to_propresenter_playlist(playlist_id, presentation_id):
     """Adds a presentation to a playlist in ProPresenter."""
     try:
         response = requests.post(f"{PROPPRESENTER_URL}/api/v1/playlist/{playlist_id}/items", json={"id": presentation_id})
         response.raise_for_status()
+        return None
     except requests.exceptions.RequestException as e:
-        print(f"Error adding to ProPresenter playlist: {e}")
+        return f"Error adding to ProPresenter playlist: {e}"
 
-def create_propresenter_playlist(playlist_name, items):
+def create_propresenter_playlist(playlist_name, items, library):
     """Creates a playlist in ProPresenter and adds items to it."""
+    log = []
     try:
         response = requests.post(f"{PROPPRESENTER_URL}/api/v1/playlist", json={"name": playlist_name})
-        response.raise_for_status()  # Raise an exception for bad status codes
+        response.raise_for_status()
         playlist_id = response.json()["id"]
-        print(f"Successfully created playlist '{playlist_name}' with ID: {playlist_id}")
-
-        library = get_library()
+        log.append(f"Successfully created playlist '{playlist_name}' with ID: {playlist_id}")
 
         for item in items:
             if item["type"] == "song":
                 presentation = find_presentation_in_library(library, item["name"])
                 if presentation:
-                    add_to_propresenter_playlist(playlist_id, presentation["id"])
-                    print(f"Added '{item['name']}' to the playlist.")
+                    error = add_to_propresenter_playlist(playlist_id, presentation["id"])
+                    if error:
+                        log.append(error)
+                    else:
+                        log.append(f"Added '{item['name']}' to the playlist.")
                 else:
-                    print(f"Could not find '{item['name']}' in the ProPresenter library.")
+                    log.append(f"Could not find '{item['name']}' in the ProPresenter library.")
             elif item["type"] == "psalm":
                 presentation = create_propresenter_presentation(item["name"], item["content"])
-                if presentation:
-                    add_to_propresenter_playlist(playlist_id, presentation["id"])
-                    print(f"Added '{item['name']}' to the playlist.")
+                if presentation and 'id' in presentation:
+                    error = add_to_propresenter_playlist(playlist_id, presentation["id"])
+                    if error:
+                        log.append(error)
+                    else:
+                        log.append(f"Added '{item['name']}' to the playlist.")
+                else:
+                    log.append(f"Failed to create presentation for '{item['name']}'.")
+        
+        log.append(f"Playlist '{playlist_name}' created successfully.")
+        return "\n".join(log)
 
     except requests.exceptions.RequestException as e:
-        print(f"Error creating ProPresenter playlist: {e}")
-
-def main():
-    """Main function to orchestrate the process."""
-    # 1. Get file path from user
-    file_path = "/Users/mats/Documents/Python-ProPresenter/Python-ProPresenter/example.docx"
-
-    # 2. Parse the .docx file
-    service_items = parse_docx(file_path)
-    
-    songs_to_import = [item["value"] for item in service_items if item["type"] == "song"]
-    if songs_to_import:
-        print("Please import the following songs into ProPresenter from CCLI SongSelect:")
-        for song in songs_to_import:
-            print(f"- {song}")
-        input("Press Enter to continue after importing the songs...")
-
-    # 3. Get lyrics and psalm text
-    playlist_items = []
-    for item in service_items:
-        if item["type"] == "song":
-            playlist_items.append({"type": "song", "name": item["value"]})
-        elif item["type"] == "psalm":
-            psalm_text = get_psalm(item["value"], "luther") # Using 'luther' as a fallback for 'Luther17'
-            playlist_items.append({"type": "psalm", "name": item["value"], "content": psalm_text})
-    
-    # 4. Create ProPresenter playlist
-    playlist_name = "Gottesdienst 6.Juli 2025"
-    create_propresenter_playlist(playlist_name, playlist_items)
-
-if __name__ == "__main__":
-    main()
+        error_message = f"Error creating ProPresenter playlist: {e}"
+        log.append(error_message)
+        return "\n".join(log)
