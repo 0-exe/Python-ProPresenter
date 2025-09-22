@@ -8,15 +8,14 @@ import ast
 # ProPresenter API configuration
 PROPPRESENTER_URL = "http://localhost:1025"
 
-def detect_songs_with_gemini(text):
+def detect_songs_with_gemini(text, api_key, model_name):
     """Detects songs in a text using the Gemini API."""
     try:
-        api_key = os.environ.get("GEMINI_API_KEY")
         if not api_key:
-            return "Error: GEMINI_API_KEY environment variable not set."
+            return "Error: Gemini API key is not set."
         
         genai.configure(api_key=api_key)
-        model = genai.GenerativeModel('gemini-pro')
+        model = genai.GenerativeModel(model_name)
         
         prompt = f"""You are an expert at parsing church service plans. From the following text, extract all song titles. Return only a Python list of strings, where each string is a song title. For example: `["Song Title 1", "Song Title 2"]`. Do not include psalms or other non-song items. If no songs are found, return an empty list `[]`. Text:
 
@@ -42,14 +41,14 @@ def detect_songs_with_gemini(text):
     except Exception as e:
         return f"Error calling Gemini API: {e}"
 
-def parse_docx(file_path):
+def parse_docx(file_path, api_key, model_name):
     """Parses the .docx file to extract songs and psalms."""
     try:
         doc = docx.Document(file_path)
         full_text = "\n".join([para.text for para in doc.paragraphs])
         
         # Use Gemini to detect songs
-        song_titles = detect_songs_with_gemini(full_text)
+        song_titles = detect_songs_with_gemini(full_text, api_key, model_name)
         if isinstance(song_titles, str): # Error occurred
             return song_titles
 

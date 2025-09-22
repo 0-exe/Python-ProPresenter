@@ -1,0 +1,13 @@
+# Virtual environment
+.venv/
+
+# Configuration file with API key
+config.json
+
+# IDE and editor files
+.vscode/
+.idea/
+
+# Python cache
+__pycache__/
+*.pyc
